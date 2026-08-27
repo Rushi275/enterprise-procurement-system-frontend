@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body { height: 100%; }
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #F6F7FB;
+  color: #12172B;
+}
+h1, h2, h3, h4, .font-display { font-family: 'Space Grotesk', sans-serif; }
+.font-mono-num { font-family: 'IBM Plex Mono', monospace; }
+
+:focus-visible {
+  outline: 2px solid #3454D1;
+  outline-offset: 2px;
+}
