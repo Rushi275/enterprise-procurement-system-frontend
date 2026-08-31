@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, X, Wallet, ListChecks, Building2 } from "lucide-react";
 import { listRequests, updateRequestStatus } from "../api/requests";
 import { useAuth } from "../context/AuthContext";
-import StatusPill from "../components/StatusPill";
 import Topbar from "../components/Topbar";
 import { SkeletonRows, EmptyState } from "./Home";
 
@@ -17,10 +16,13 @@ const STATUS_COLORS = {
 
 export default function Dashboard() {
   const { user } = useAuth();
+
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(null);
+
   const isManager = user?.role === "MANAGER";
+  const isAdmin = user?.role === "ADMIN";
 
   useEffect(() => {
     refresh();
@@ -28,11 +30,11 @@ export default function Dashboard() {
 
   async function refresh() {
     setLoading(true);
+
     try {
       const all = await listRequests();
       setRequests(all);
     } catch {
-      // ignore — likely backend not running in this preview
     } finally {
       setLoading(false);
     }
@@ -45,27 +47,41 @@ export default function Dashboard() {
 
   const byStatus = useMemo(() => {
     const counts = {};
+
     requests.forEach((r) => {
       counts[r.status] = (counts[r.status] ?? 0) + 1;
     });
+
     return counts;
   }, [requests]);
 
   const byCategory = useMemo(() => {
     const map = {};
+
     requests.forEach((r) => {
       const name = r.category?.categoryName ?? "Uncategorized";
       map[name] = (map[name] ?? 0) + (r.totalPrice ?? 0);
     });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 6);
+
+    return Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
   }, [requests]);
 
-  const maxCategorySpend = Math.max(1, ...byCategory.map(([, v]) => v));
+  const maxCategorySpend = Math.max(
+    1,
+    ...byCategory.map(([, value]) => value)
+  );
 
-  const actionable = requests.filter((r) => r.status === "PENDING");
+  const actionable = isManager
+    ? requests.filter((r) => r.status === "PENDING")
+    : isAdmin
+    ? requests.filter((r) => r.status === "MANAGER_APPROVED")
+    : [];
 
   async function act(id, status) {
     setBusyId(id);
+
     try {
       await updateRequestStatus(id, status);
       await refresh();
@@ -74,7 +90,10 @@ export default function Dashboard() {
     }
   }
 
-  const conicGradient = buildConicGradient(byStatus, requests.length);
+  const conicGradient = buildConicGradient(
+    byStatus,
+    requests.length
+  );
 
   return (
     <div>
@@ -86,33 +105,59 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="bg-card rounded-card shadow-card border border-ink/5 p-6 flex flex-col justify-between">
           <div className="flex items-center gap-2 text-slate text-xs font-medium mb-4">
-            <Wallet size={14} /> Total request value
+            <Wallet size={14} />
+            Total request value
           </div>
+
           <div className="font-display text-3xl font-semibold text-ink font-mono-num">
-            ₹{totalSpend.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+            ₹
+            {totalSpend.toLocaleString("en-IN", {
+              maximumFractionDigits: 0,
+            })}
           </div>
-          <p className="text-xs text-slate-light mt-1">Across {requests.length} requests</p>
+
+          <p className="text-xs text-slate-light mt-1">
+            Across {requests.length} requests
+          </p>
         </div>
 
         <div className="bg-card rounded-card shadow-card border border-ink/5 p-6">
           <div className="flex items-center gap-2 text-slate text-xs font-medium mb-4">
-            <ListChecks size={14} /> Status breakdown
+            <ListChecks size={14} />
+            Status breakdown
           </div>
+
           <div className="flex items-center gap-5">
             <div
               className="h-20 w-20 rounded-full shrink-0"
-              style={{ background: conicGradient || "#EEF0F6" }}
+              style={{
+                background: conicGradient || "#EEF0F6",
+              }}
             />
+
             <ul className="space-y-1.5 text-xs">
               {Object.keys(STATUS_COLORS).map((key) =>
                 byStatus[key] ? (
-                  <li key={key} className="flex items-center gap-2">
+                  <li
+                    key={key}
+                    className="flex items-center gap-2"
+                  >
                     <span
                       className="h-2 w-2 rounded-full shrink-0"
-                      style={{ background: STATUS_COLORS[key] }}
+                      style={{
+                        background: STATUS_COLORS[key],
+                      }}
                     />
-                    <span className="text-slate">{key.replace("_", " ").toLowerCase()}</span>
-                    <span className="font-mono-num text-ink ml-auto pl-3">{byStatus[key]}</span>
+
+                    <span className="text-slate">
+                      {key
+                        .replace("_", " ")
+                        .toLowerCase()}
+                    </span>
+
+                    <span className="font-mono-num text-ink ml-auto pl-3">
+                      {byStatus[key]}
+                    </span>
                   </li>
                 ) : null
               )}
@@ -122,24 +167,40 @@ export default function Dashboard() {
 
         <div className="bg-card rounded-card shadow-card border border-ink/5 p-6">
           <div className="flex items-center gap-2 text-slate text-xs font-medium mb-4">
-            <Building2 size={14} /> Spend by category
+            <Building2 size={14} />
+            Spend by category
           </div>
+
           <div className="space-y-2.5">
             {byCategory.length === 0 && (
-              <p className="text-xs text-slate-light">No category data yet.</p>
+              <p className="text-xs text-slate-light">
+                No category data yet.
+              </p>
             )}
+
             {byCategory.map(([name, value]) => (
               <div key={name}>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate">{name}</span>
+                  <span className="text-slate">
+                    {name}
+                  </span>
+
                   <span className="font-mono-num text-ink">
-                    ₹{value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    ₹
+                    {value.toLocaleString("en-IN", {
+                      maximumFractionDigits: 0,
+                    })}
                   </span>
                 </div>
+
                 <div className="h-1.5 rounded-full bg-ink/5 overflow-hidden">
                   <div
                     className="h-full bg-signal rounded-full transition-all"
-                    style={{ width: `${(value / maxCategorySpend) * 100}%` }}
+                    style={{
+                      width: `${
+                        (value / maxCategorySpend) * 100
+                      }%`,
+                    }}
                   />
                 </div>
               </div>
@@ -148,11 +209,18 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {isManager && (
+      {(isManager || isAdmin) && (
         <div className="bg-card rounded-card shadow-card border border-ink/5 p-6">
-          <h2 className="font-display font-semibold text-ink mb-1">Awaiting your review</h2>
+          <h2 className="font-display font-semibold text-ink mb-1">
+            {isManager
+              ? "Awaiting your review"
+              : "Awaiting admin approval"}
+          </h2>
+
           <p className="text-sm text-slate mb-5">
-            Requests raised by your team, pending manager approval.
+            {isManager
+              ? "Requests raised by your team, pending manager approval."
+              : "Requests approved by the manager and waiting for your approval."}
           </p>
 
           {loading ? (
@@ -161,32 +229,66 @@ export default function Dashboard() {
             <EmptyState
               icon={ListChecks}
               title="Nothing pending"
-              body="New requests from your team will show up here for approval."
+              body={
+                isManager
+                  ? "New requests from your team will show up here for approval."
+                  : "Manager-approved requests will show up here for admin approval."
+              }
             />
           ) : (
             <div className="divide-y divide-ink/5">
               {actionable.map((r) => (
-                <div key={r.requestId} className="flex items-center justify-between py-4">
+                <div
+                  key={r.requestId}
+                  className="flex items-center justify-between py-4"
+                >
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-ink">
-                      {r.product?.name ?? "Item request"} · Qty {r.numberOfQuantities}
+                      {r.product?.name ?? "Item request"} · Qty{" "}
+                      {r.numberOfQuantities}
                     </div>
+
                     <div className="text-xs text-slate-light mt-0.5">
-                      Raised by {r.user?.name ?? "—"} · ₹{(r.totalPrice ?? 0).toLocaleString("en-IN")}
+                      Raised by {r.user?.name ?? "—"} · ₹
+                      {(r.totalPrice ?? 0).toLocaleString(
+                        "en-IN"
+                      )}
                     </div>
+
+                    {isAdmin && (
+                      <div className="text-xs text-slate-light mt-1">
+                        Status: Manager Approved
+                      </div>
+                    )}
                   </div>
+
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       disabled={busyId === r.requestId}
-                      onClick={() => act(r.requestId, "MANAGER_REJECTED")}
+                      onClick={() =>
+                        act(
+                          r.requestId,
+                          isManager
+                            ? "MANAGER_REJECTED"
+                            : "REJECTED"
+                        )
+                      }
                       className="h-8 w-8 rounded-lg bg-coral-light text-coral flex items-center justify-center hover:opacity-80 disabled:opacity-40 transition"
                       title="Reject"
                     >
                       <X size={15} />
                     </button>
+
                     <button
                       disabled={busyId === r.requestId}
-                      onClick={() => act(r.requestId, "MANAGER_APPROVED")}
+                      onClick={() =>
+                        act(
+                          r.requestId,
+                          isManager
+                            ? "MANAGER_APPROVED"
+                            : "APPROVED"
+                        )
+                      }
                       className="h-8 w-8 rounded-lg bg-good-light text-good flex items-center justify-center hover:opacity-80 disabled:opacity-40 transition"
                       title="Approve"
                     >
@@ -205,12 +307,22 @@ export default function Dashboard() {
 
 function buildConicGradient(byStatus, total) {
   if (!total) return null;
+
   let acc = 0;
-  const stops = Object.entries(byStatus).map(([status, count]) => {
-    const start = (acc / total) * 360;
-    acc += count;
-    const end = (acc / total) * 360;
-    return `${STATUS_COLORS[status] ?? "#9298A8"} ${start}deg ${end}deg`;
-  });
+
+  const stops = Object.entries(byStatus).map(
+    ([status, count]) => {
+      const start = (acc / total) * 360;
+
+      acc += count;
+
+      const end = (acc / total) * 360;
+
+      return `${
+        STATUS_COLORS[status] ?? "#9298A8"
+      } ${start}deg ${end}deg`;
+    }
+  );
+
   return `conic-gradient(${stops.join(", ")})`;
 }

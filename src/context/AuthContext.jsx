@@ -6,7 +6,9 @@ const AuthContext = createContext(null);
 function decodeJwt(token) {
   try {
     const payload = token.split(".")[1];
-    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const decoded = JSON.parse(
+      atob(payload.replace(/-/g, "+").replace(/_/g, "/"))
+    );
     return decoded;
   } catch {
     return null;
@@ -18,6 +20,7 @@ export function AuthProvider({ children }) {
     const stored = localStorage.getItem("user");
     return stored ? JSON.parse(stored) : null;
   });
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -28,10 +31,25 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  async function login(email, password) {
+  async function login(email, password, loginType) {
     setLoading(true);
+
     try {
-      const res = await client.post("/users/login", { email, password });
+      let endpoint;
+
+      if (loginType === "ADMIN") {
+        endpoint = "/admin/login";
+      } else if (loginType === "SUPPLIER") {
+        endpoint = "/supplier/login";
+      } else {
+        endpoint = "/users/login";
+      }
+
+      const res = await client.post(endpoint, {
+        email,
+        password,
+      });
+
       const token = res.data;
 
       if (!token || token.startsWith("Invalid")) {
@@ -39,15 +57,19 @@ export function AuthProvider({ children }) {
       }
 
       localStorage.setItem("token", token);
+
       const claims = decodeJwt(token);
 
-      // Look up the full profile so we have userId / department for raising requests.
-      const usersRes = await client.get("/users");
-      const fullUser = usersRes.data.find((u) => u.email === email);
+      let fullUser = null;
+
+      if (loginType !== "ADMIN" && loginType !== "SUPPLIER") {
+        const usersRes = await client.get("/users");
+        fullUser = usersRes.data.find((u) => u.email === email);
+      }
 
       const sessionUser = {
         email: claims?.sub ?? email,
-        role: claims?.role ?? fullUser?.role ?? "EMPLOYEE",
+        role: claims?.role ?? loginType,
         userId: fullUser?.userId,
         name: fullUser?.name,
         department: fullUser?.department,
@@ -55,6 +77,7 @@ export function AuthProvider({ children }) {
       };
 
       setUser(sessionUser);
+
       return sessionUser;
     } finally {
       setLoading(false);
@@ -63,6 +86,7 @@ export function AuthProvider({ children }) {
 
   async function register(payload) {
     setLoading(true);
+
     try {
       await client.post("/users", payload);
     } finally {
@@ -76,7 +100,15 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        loading,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -84,6 +116,10 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+
+  if (!ctx) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+
   return ctx;
 }
